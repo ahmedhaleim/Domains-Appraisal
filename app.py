@@ -1,3 +1,4 @@
+# --- الكود المصحح ---
 from flask import Flask, render_template_string, request
 import requests
 import json
@@ -68,30 +69,29 @@ HTML_TEMPLATE = """
 def home():
     appraisal_data = None
     error_message = None
-    domain_input = None
+    domain_input = request.form.get('domain', '').strip().lower() if request.method == 'POST' else ''
     namebio_query = None
 
     if request.method == 'POST':
-        domain_input = request.form.get('domain', '').strip().lower()
         if not domain_input:
             error_message = "الرجاء إدخال اسم نطاق صحيح."
         elif not API_KEY or not API_SECRET:
-             error_message = "خطأ في الإعداد: مفاتيح GoDaddy API غير موجودة في متغيرات البيئة."
+             error_message = "خطأ في الإعداد: مفاتيح GoDaddy API غير موجودة. يرجى التأكد من إضافتها بشكل صحيح في إعدادات Vercel."
         else:
             headers = {'Authorization': f'sso-key {API_KEY}:{API_SECRET}'}
             try:
                 response = requests.get(GODADDY_API_URL.format(domain=domain_input), headers=headers)
-                if response.status_code == 200:
-                    appraisal_data = response.json()
-                    # تجهيز رابط البحث لـ NameBio
-                    main_keyword = domain_input.split('.')[0].replace('-', ' ')
-                    namebio_query = quote(main_keyword)
-                else:
-                    error_message = f"حدث خطأ من GoDaddy (Code: {response.status_code}). تأكد من أن النطاق صحيح وأن مفاتيح API تعمل."
+                response.raise_for_status() # سيؤدي هذا إلى ظهور خطأ في حالة الاستجابات الفاشلة (4xx أو 5xx)
+                appraisal_data = response.json()
+                main_keyword = domain_input.split('.')[0].replace('-', ' ')
+                namebio_query = quote(main_keyword)
+            except requests.exceptions.HTTPError as err:
+                error_message = f"حدث خطأ من GoDaddy (Code: {err.response.status_code}). تأكد من أن النطاق صحيح وأن مفاتيح API تعمل."
             except Exception as e:
                 error_message = f"فشل الاتصال بالخادم: {e}"
     
     return render_template_string(HTML_TEMPLATE, appraisal=appraisal_data, error=error_message, domain_input=domain_input, namebio_query=namebio_query)
 
+# هذا السطر ليس ضروريًا لـ Vercel ولكنه جيد للاختبار المحلي
 if __name__ == '__main__':
     app.run(debug=True)
